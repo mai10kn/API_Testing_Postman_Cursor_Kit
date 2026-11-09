@@ -462,8 +462,8 @@
     }
   ],
   "variable": [
-    { "key": "access_token", "value": "", "type": "secret" },
-    { "key": "expired_access_token", "value": "", "type": "secret" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "expired_access_token", "value": "", "type": "string" },
     { "key": "original_name", "value": "" },
     { "key": "base_url_runtime", "value": "" },
     { "key": "name_255", "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
