@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "90c01ff5-61a1-4bdb-90c8-c3b45efde661",
     "name": "Welvie - Admin Profile API",
-    "description": "Collection chạy 18 test case cho GET/POST /api/admin/auth/me.\n\nCách chạy:\n1. Import collection này và testcase/welvie-stg.postman_environment.json.\n2. Chọn environment Welvie STG; bảo đảm admin_email/admin_password có giá trị hợp lệ.\n3. Run toàn bộ collection đúng thứ tự. Setup tự login, lưu data.access_token vào Collection Variable access_token và snapshot profile; Teardown tự khôi phục name ban đầu.\n4. Muốn chạy TC_005 và TC_015, điền Collection Variable expired_access_token bằng token admin đã hết hạn. Nếu để trống, hai request tự skip.\n\nNguồn expected: basic design/document.json (OpenAPI 3.1.0). Các nhánh chưa đủ contract như 403, mass assignment, malformed JSON, sai Content-Type, payload quá lớn và rate limit không được đưa vào collection.",
+    "description": "Collection chạy 27 test case cho GET/POST /api/admin/auth/me, gồm positive, validation, authentication, data integrity, security và abnormal.\n\nCách chạy:\n1. Import collection này và testcase/welvie-stg.postman_environment.json.\n2. Chọn environment Welvie STG; bảo đảm admin_email/admin_password có giá trị hợp lệ.\n3. Run toàn bộ collection đúng thứ tự. Setup tự login, lưu data.access_token vào Collection Variable access_token và snapshot profile; Teardown tự khôi phục name ban đầu.\n4. Muốn chạy TC_005 và TC_015, điền Collection Variable expired_access_token bằng token admin đã hết hạn. Nếu để trống, hai request tự skip.\n\nNguồn expected: basic design/document.json (OpenAPI 3.1.0). Các nhánh chưa đủ contract như 403, mass assignment, malformed JSON, sai Content-Type, payload quá lớn và rate limit không được đưa vào collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -17,8 +17,8 @@
           "const requestName = pm.info.requestName;",
           "const tc = (requestName.match(/TC_\\d{3}/) || [null])[0];",
           "const status200 = new Set(['TC_001','TC_002','TC_006','TC_007','TC_008','TC_016','TC_017','TC_018']);",
-          "const status401 = new Set(['TC_003','TC_004','TC_005','TC_013','TC_014','TC_015']);",
-          "const status422 = new Set(['TC_009','TC_010','TC_011','TC_012']);",
+          "const status401 = new Set(['TC_003','TC_004','TC_005','TC_013','TC_014','TC_015','TC_019','TC_020','TC_021','TC_022']);",
+          "const status422 = new Set(['TC_009','TC_010','TC_011','TC_012','TC_023','TC_024','TC_025','TC_026','TC_027']);",
           "const isSetup = requestName.startsWith('SETUP');",
           "const isTeardown = requestName.startsWith('TEARDOWN');",
           "const isSnapshot = requestName.startsWith('SNAPSHOT');",
@@ -424,6 +424,131 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\"name\":\"Admin Sensitive Check 01\"}", "options": { "raw": { "language": "json" } } },
             "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Abnormal",
+      "item": [
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_019 - GET với Bearer token rỗng",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal authentication: Bearer scheme không có credential. Expected 401 theo AuthenticationException."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_020 - GET với Basic auth thay cho Bearer",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Basic Zm9vOmJhcg==" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal authentication: API chỉ khai báo HTTP Bearer, không chấp nhận Basic auth."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_021 - GET chỉ truyền token qua query",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/auth/me?access_token={{access_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["api","admin","auth","me"],
+              "query": [{ "key": "access_token", "value": "{{access_token}}" }]
+            },
+            "description": "Abnormal authentication: token hợp lệ nhưng sai vị trí; security scheme yêu cầu Authorization Bearer header."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_022 - POST với Bearer token rỗng",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Empty Bearer Update\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal authentication: request update hợp lệ nhưng Bearer credential rỗng."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_023 - Name là boolean",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":true}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal type: UpdateProfileRequest yêu cầu name là string."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_024 - Name là array",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":[\"Admin\"]}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal type: UpdateProfileRequest yêu cầu name là string."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_025 - Name là object",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":{\"value\":\"Admin\"}}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal type: UpdateProfileRequest yêu cầu name là string."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_026 - Body JSON null",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "null", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal root type: request body phải là UpdateProfileRequest object có name bắt buộc."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_ADMIN_PROFILE_TC_027 - Request body rỗng",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/me", "host": ["{{base_url}}"], "path": ["api","admin","auth","me"] },
+            "description": "Abnormal required body/name: requestBody và name đều bắt buộc."
           },
           "response": []
         }
