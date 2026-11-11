@@ -1,0 +1,478 @@
+{
+  "info": {
+    "_postman_id": "eec0888b-d8df-4e80-baa7-2cdd9019424d",
+    "name": "Welvie - Service Type API",
+    "description": "30 test cases cho Service Type Management từ basic design/document.json.\n\nImport cùng testcase/welvie-stg.postman_environment.json, chọn Welvie STG và chạy toàn bộ collection đúng thứ tự. Collection dùng admin_email/admin_password và viewer_email/viewer_password, tạo dữ liệu động, chỉ xóa record do test tạo và có fallback cleanup.\n\nKhông test DELETE 400 cho service type đang được sử dụng vì tài liệu không cung cấp fixture an toàn.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "noauth" },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const n = pm.info.requestName;",
+          "const viewerCases = ['TC_004','TC_015','TC_023','TC_024'];",
+          "const tc = (n.match(/TC_\\d{3}/) || [null])[0];",
+          "if (viewerCases.includes(tc) && !pm.collectionVariables.get('st_viewer_token')) {",
+          "  console.log(`SKIP ${tc}: viewer login không thành công hoặc thiếu credential`);",
+          "  pm.execution.skipRequest();",
+          "}",
+          "const primaryCases = ['TC_016','TC_017','TC_018','TC_019','TC_020','TC_022','TC_023','TC_024','TC_025','TC_027','TC_028','TC_029'];",
+          "if (primaryCases.includes(tc) && !pm.collectionVariables.get('service_type_id')) {",
+          "  console.log(`SKIP ${tc}: TC_005 chưa tạo service_type_id`);",
+          "  pm.execution.skipRequest();",
+          "}",
+          "if (tc === 'TC_030' && !pm.collectionVariables.get('service_type_boundary_id')) {",
+          "  console.log('SKIP TC_030: TC_009 chưa tạo boundary ID');",
+          "  pm.execution.skipRequest();",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const n = pm.info.requestName;",
+          "const tc = (n.match(/TC_\\d{3}/) || [null])[0];",
+          "const isSetup = n.startsWith('SETUP');",
+          "const isCleanup = n.startsWith('CLEANUP');",
+          "const s200 = new Set(['TC_001','TC_005','TC_009','TC_016','TC_017','TC_027','TC_028','TC_030']);",
+          "const s401 = new Set(['TC_002','TC_003','TC_014','TC_022','TC_025']);",
+          "const s403 = new Set(['TC_004','TC_015','TC_023','TC_024']);",
+          "const s404 = new Set(['TC_021','TC_026','TC_029']);",
+          "const s422 = new Set(['TC_006','TC_007','TC_008','TC_010','TC_011','TC_012','TC_013','TC_018','TC_019','TC_020']);",
+          "const expected = isSetup ? 200 : s200.has(tc) ? 200 : s401.has(tc) ? 401 : s403.has(tc) ? 403 : s404.has(tc) ? 404 : s422.has(tc) ? 422 : null;",
+          "if (isCleanup) {",
+          "  pm.test('Cleanup trả 200 hoặc 404', () => pm.expect(pm.response.code).to.be.oneOf([200,404]));",
+          "} else if (expected !== null) {",
+          "  pm.test(`HTTP ${expected}`, () => pm.response.to.have.status(expected));",
+          "}",
+          "pm.test('Content-Type application/json', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/json'));",
+          "let j;",
+          "pm.test('Response là JSON object', () => { j = pm.response.json(); pm.expect(j).to.be.an('object'); });",
+          "if (!j) throw new Error('Response không phải JSON');",
+          "pm.test('Envelope đủ key', () => pm.expect(j).to.include.all.keys('message','errors','data','meta'));",
+          "if (isSetup && pm.response.code === 200) {",
+          "  pm.test('Login trả access_token', () => pm.expect(j.data.access_token).to.be.a('string').and.not.empty);",
+          "  if (n.includes('Admin')) pm.collectionVariables.set('st_access_token', j.data.access_token);",
+          "  if (n.includes('Viewer')) pm.collectionVariables.set('st_viewer_token', j.data.access_token);",
+          "}",
+          "if ([401,403,404].includes(expected)) {",
+          "  pm.test('Error envelope đúng contract', () => {",
+          "    pm.expect(j.message).to.be.a('string'); pm.expect(j.errors).to.be.null;",
+          "    pm.expect(j.data).to.be.null; pm.expect(j.meta).to.be.an('object');",
+          "  });",
+          "}",
+          "if (expected === 422) {",
+          "  const nameCases = new Set(['TC_006','TC_007','TC_008','TC_010','TC_018','TC_019']);",
+          "  const field = nameCases.has(tc) ? 'name' : 'sort_order';",
+          "  pm.test(`ValidationException có errors.${field}`, () => {",
+          "    pm.expect(j.message).to.be.a('string'); pm.expect(j.errors).to.be.an('object');",
+          "    pm.expect(j.errors).to.have.property(field).that.is.an('array');",
+          "    pm.expect(j.data).to.be.null; pm.expect(j.meta).to.be.an('object');",
+          "  });",
+          "}",
+          "if (['TC_001','TC_028'].includes(tc) && pm.response.code === 200) {",
+          "  pm.test('List response đúng schema', () => {",
+          "    pm.expect(j.errors).to.be.null; pm.expect(j.data).to.be.an('array'); pm.expect(j.meta).to.be.an('object');",
+          "    j.data.forEach(x => {",
+          "      pm.expect(x).to.include.all.keys('id','name','sort_order','office_count');",
+          "      pm.expect(Number.isInteger(x.id)).to.be.true; pm.expect(x.name).to.be.a('string');",
+          "      pm.expect(Number.isInteger(x.sort_order)).to.be.true; pm.expect(Number.isInteger(x.office_count)).to.be.true;",
+          "    });",
+          "  });",
+          "  if (tc === 'TC_028') pm.test('ID đã xóa không còn trong list', () => pm.expect(j.data.map(x => String(x.id))).to.not.include(pm.collectionVariables.get('service_type_id')));",
+          "}",
+          "if (['TC_005','TC_009','TC_016','TC_017'].includes(tc) && pm.response.code === 200) {",
+          "  pm.test('Service Type resource đúng schema', () => {",
+          "    pm.expect(j.errors).to.be.null; pm.expect(j.meta).to.be.an('object');",
+          "    pm.expect(j.data).to.include.all.keys('id','name','sort_order','created_at','updated_at');",
+          "    pm.expect(Number.isInteger(j.data.id)).to.be.true; pm.expect(j.data.name).to.be.a('string');",
+          "    pm.expect(Number.isInteger(j.data.sort_order)).to.be.true;",
+          "    pm.expect(j.data.created_at).to.be.a('string'); pm.expect(j.data.updated_at).to.be.a('string');",
+          "  });",
+          "}",
+          "if (tc === 'TC_005' && pm.response.code === 200) {",
+          "  pm.test('Create trả đúng dữ liệu', () => { pm.expect(j.data.name).to.equal(pm.collectionVariables.get('st_name')); pm.expect(j.data.sort_order).to.equal(101); });",
+          "  pm.collectionVariables.set('service_type_id', String(j.data.id));",
+          "}",
+          "if (tc === 'TC_009' && pm.response.code === 200) {",
+          "  pm.test('Name giữ đủ 255 ký tự', () => pm.expect(j.data.name).to.have.lengthOf(255));",
+          "  pm.collectionVariables.set('service_type_boundary_id', String(j.data.id));",
+          "}",
+          "if (tc === 'TC_016' && pm.response.code === 200) pm.test('Update trả đúng value', () => { pm.expect(j.data.name).to.equal(pm.collectionVariables.get('st_updated_name')); pm.expect(j.data.sort_order).to.equal(201); });",
+          "if (tc === 'TC_017' && pm.response.code === 200) pm.test('Update giữ đủ 255 ký tự', () => pm.expect(j.data.name).to.have.lengthOf(255));",
+          "if (['TC_027','TC_030'].includes(tc) && pm.response.code === 200) pm.test('Delete success có data null', () => { pm.expect(j.errors).to.be.null; pm.expect(j.data).to.be.null; pm.expect(j.meta).to.be.an('object'); });",
+          "if (isCleanup) {",
+          "  if (n.includes('primary')) pm.collectionVariables.unset('service_type_id');",
+          "  if (n.includes('boundary')) pm.collectionVariables.unset('service_type_boundary_id');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Setup",
+      "item": [
+        {
+          "name": "SETUP - Admin Login",
+          "event": [{
+            "listen": "prerequest",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const suffix = `${Date.now()}_${Math.random().toString(16).slice(2,8)}`;",
+                "pm.collectionVariables.set('st_name', `auto_api_service_type_${suffix}`);",
+                "pm.collectionVariables.set('st_updated_name', `auto_api_service_type_updated_${suffix}`);",
+                "pm.collectionVariables.unset('service_type_id');",
+                "pm.collectionVariables.unset('service_type_boundary_id');",
+                "pm.collectionVariables.unset('st_access_token');",
+                "pm.collectionVariables.unset('st_viewer_token');"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{admin_email}}\",\"password\":\"{{admin_password}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/login", "host": ["{{base_url}}"], "path": ["api","admin","auth","login"] }
+          },
+          "response": []
+        },
+        {
+          "name": "SETUP - Viewer Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"{{viewer_email}}\",\"password\":\"{{viewer_password}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/auth/login", "host": ["{{base_url}}"], "path": ["api","admin","auth","login"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01. GET List",
+      "item": [
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_001 - List hợp lệ và schema",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_002 - GET thiếu token",
+          "request": {
+            "auth": { "type": "noauth" }, "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_003 - GET token sai",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "invalid.jwt.token", "type": "string" }] },
+            "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_004 - Viewer GET bị từ chối",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_viewer_token}}", "type": "string" }] },
+            "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        }
+      ]
+    },
+    {
+      "name": "02. POST Create",
+      "item": [
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_005 - Create hợp lệ",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}\",\"sort_order\":101}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_006 - Create thiếu name",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sort_order\":101}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_007 - Create name null",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":null,\"sort_order\":101}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_008 - Create name number",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":12345,\"sort_order\":101}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_009 - Create name 255 ký tự",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{name_255}}\",\"sort_order\":102}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_010 - Create name 256 ký tự",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{name_256}}\",\"sort_order\":103}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_011 - Create thiếu sort_order",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}_missing_sort\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_012 - Create sort_order 0",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}_sort_zero\",\"sort_order\":0}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_013 - Create sort_order string",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}_sort_string\",\"sort_order\":\"1\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_014 - POST thiếu token",
+          "request": {
+            "auth": { "type": "noauth" }, "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}_noauth\",\"sort_order\":104}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_015 - Viewer POST bị từ chối",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_viewer_token}}", "type": "string" }] },
+            "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_name}}_viewer\",\"sort_order\":105}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. PUT Update",
+      "item": [
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_016 - Update hợp lệ",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_updated_name}}\",\"sort_order\":201}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_017 - Update name 255 ký tự",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{name_b_255}}\",\"sort_order\":202}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_018 - Update name 256 ký tự",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{name_b_256}}\",\"sort_order\":203}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_019 - Update thiếu name",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sort_order\":202}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_020 - Update sort_order 0",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"{{st_updated_name}}\",\"sort_order\":0}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_021 - Update ID không tồn tại",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Not Found Update\",\"sort_order\":201}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/2147483647", "host": ["{{base_url}}"], "path": ["api","admin","service-types","2147483647"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_022 - PUT thiếu token",
+          "request": {
+            "auth": { "type": "noauth" }, "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"No Auth Update\",\"sort_order\":201}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_023 - Viewer PUT bị từ chối",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_viewer_token}}", "type": "string" }] },
+            "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"name\":\"Viewer Update\",\"sort_order\":201}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. DELETE & Data Integrity",
+      "item": [
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_024 - Viewer DELETE bị từ chối",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_viewer_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_025 - DELETE thiếu token",
+          "request": {
+            "auth": { "type": "noauth" }, "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_026 - DELETE ID không tồn tại",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/2147483647", "host": ["{{base_url}}"], "path": ["api","admin","service-types","2147483647"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_027 - DELETE primary record",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_028 - GET xác nhận ID đã xóa",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types", "host": ["{{base_url}}"], "path": ["api","admin","service-types"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_029 - DELETE lại cùng ID",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "WELVIE_SERVICE_TYPE_TC_030 - DELETE boundary record",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_boundary_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_boundary_id}}"] }
+          }, "response": []
+        }
+      ]
+    },
+    {
+      "name": "99. Fallback Cleanup",
+      "item": [
+        {
+          "name": "CLEANUP - primary",
+          "event": [{
+            "listen": "prerequest",
+            "script": { "type": "text/javascript", "exec": ["if (!pm.collectionVariables.get('service_type_id')) pm.execution.skipRequest();"] }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_id}}"] }
+          }, "response": []
+        },
+        {
+          "name": "CLEANUP - boundary",
+          "event": [{
+            "listen": "prerequest",
+            "script": { "type": "text/javascript", "exec": ["if (!pm.collectionVariables.get('service_type_boundary_id')) pm.execution.skipRequest();"] }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{st_access_token}}", "type": "string" }] },
+            "method": "DELETE", "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/admin/service-types/{{service_type_boundary_id}}", "host": ["{{base_url}}"], "path": ["api","admin","service-types","{{service_type_boundary_id}}"] }
+          }, "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "st_access_token", "value": "", "type": "string" },
+    { "key": "st_viewer_token", "value": "", "type": "string" },
+    { "key": "st_name", "value": "", "type": "string" },
+    { "key": "st_updated_name", "value": "", "type": "string" },
+    { "key": "service_type_id", "value": "", "type": "string" },
+    { "key": "service_type_boundary_id", "value": "", "type": "string" },
+    { "key": "name_255", "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "type": "string" },
+    { "key": "name_256", "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "type": "string" },
+    { "key": "name_b_255", "value": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "type": "string" },
+    { "key": "name_b_256", "value": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "type": "string" }
+  ]
+}
