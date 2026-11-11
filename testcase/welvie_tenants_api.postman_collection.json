@@ -1,0 +1,2250 @@
+{
+  "info": {
+    "_postman_id": "80905bf3-72ec-4e67-9a66-d45f14a9a0ef",
+    "name": "Welvie - Tenants API",
+    "description": "44 test cases cho Tenant APIs từ basic design/document.json: CRUD, lock/unlock, export, status/options, CS handover, tenant administrators, billing notice và service types. Import cùng welvie-stg.postman_environment.json và chạy đúng thứ tự. Handover positive mặc định skip để tránh chuyển dữ liệu hàng loạt; chỉ chạy khi chủ động cấu hình hai biến environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const n=pm.info.requestName; const tc=(n.match(/TC_\\d{3}/)||[null])[0];",
+          "const tenantCases=new Set(['TC_009','TC_011','TC_012','TC_014','TC_025','TC_026','TC_027','TC_028','TC_029','TC_030','TC_031','TC_032','TC_033','TC_034','TC_036','TC_037','TC_038','TC_040','TC_041','TC_043','TC_044']);",
+          "if (tenantCases.has(tc) && !pm.collectionVariables.get('tenant_id')) { console.log(`SKIP ${tc}: TC_005 chưa tạo tenant_id`); pm.execution.skipRequest(); }",
+          "if (['TC_028','TC_029','TC_030','TC_031'].includes(tc) && !pm.collectionVariables.get('tenant_admin_id')) { console.log(`SKIP ${tc}: TC_026 chưa lấy tenant_admin_id`); pm.execution.skipRequest(); }",
+          "if (tc==='TC_005' && (!pm.collectionVariables.get('tn_cs_id') || !pm.collectionVariables.get('tn_service_type_id'))) { console.log('SKIP TC_005: thiếu CS hoặc Service Type setup data'); pm.execution.skipRequest(); }",
+          "if (tc==='TC_023' && (!pm.environment.get('handover_from_cs_id') || !pm.environment.get('handover_to_cs_id'))) { console.log('SKIP TC_023: handover cần opt-in bằng 2 environment variables'); pm.execution.skipRequest(); }"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const n=pm.info.requestName; const tc=(n.match(/TC_\\d{3}/)||[null])[0]; const setup=n.startsWith('SETUP'); const cleanup=n.startsWith('CLEANUP');",
+          "const s200=new Set(['TC_001','TC_002','TC_005','TC_009','TC_011','TC_014','TC_015','TC_016','TC_017','TC_019','TC_021','TC_023','TC_025','TC_026','TC_028','TC_030','TC_031','TC_032','TC_034','TC_036','TC_040','TC_043']);",
+          "const s401=new Set(['TC_004']); const s404=new Set(['TC_010','TC_013','TC_035','TC_039','TC_042','TC_044']);",
+          "const s422=new Set(['TC_003','TC_006','TC_007','TC_008','TC_012','TC_018','TC_020','TC_022','TC_024','TC_027','TC_029','TC_033','TC_037','TC_038','TC_041']);",
+          "const expected=setup?200:s200.has(tc)?200:s401.has(tc)?401:s404.has(tc)?404:s422.has(tc)?422:null;",
+          "if(cleanup){pm.test('Cleanup trả 200 hoặc 404',()=>pm.expect(pm.response.code).to.be.oneOf([200,404]));}else if(expected!==null){pm.test(`HTTP ${expected}`,()=>pm.response.to.have.status(expected));}",
+          "if(tc==='TC_019'){pm.test('Content-Type CSV',()=>pm.expect(pm.response.headers.get('Content-Type')||'').to.include('text/csv'));pm.test('Có Content-Disposition',()=>pm.expect(pm.response.headers.get('Content-Disposition')).to.be.a('string').and.not.empty);}",
+          "if(tc!=='TC_019'){",
+          "pm.test('Content-Type JSON',()=>pm.expect(pm.response.headers.get('Content-Type')||'').to.include('application/json')); let j; pm.test('Response JSON object',()=>{j=pm.response.json();pm.expect(j).to.be.an('object')}); if(!j)throw new Error('Response không phải JSON');",
+          "pm.test('Envelope đủ key',()=>pm.expect(j).to.include.all.keys('message','errors','data','meta'));",
+          "if(setup&&pm.response.code===200){if(n.includes('Login')){pm.collectionVariables.set('tn_access_token',j.data.access_token);const x=`${Date.now()}_${Math.random().toString(16).slice(2,8)}`;pm.collectionVariables.set('tn_name',`auto_api_tenant_${x}`);pm.collectionVariables.set('tn_updated_name',`auto_api_tenant_updated_${x}`);pm.collectionVariables.set('tn_initial_admin_email',`auto_api_tenant_admin_${x}@example.com`);pm.collectionVariables.set('tn_second_admin_email',`auto_api_tenant_admin2_${x}@example.com`);pm.collectionVariables.set('tn_branch_name',`auto_api_branch_${x}`);pm.collectionVariables.unset('tenant_id');pm.collectionVariables.unset('tenant_admin_id');}if(n.includes('Customer Support')){pm.test('Có ít nhất một CS option',()=>pm.expect(j.data).to.be.an('array').and.not.empty);if(j.data?.[0])pm.collectionVariables.set('tn_cs_id',String(j.data[0].id));}if(n.includes('Service Type')){pm.test('Có ít nhất một Service Type',()=>pm.expect(j.data).to.be.an('array').and.not.empty);if(j.data?.[0])pm.collectionVariables.set('tn_service_type_id',String(j.data[0].id));}}",
+          "if([401,404].includes(expected)){pm.test('Error envelope đúng contract',()=>{pm.expect(j.message).to.be.a('string');pm.expect(j.errors).to.be.null;pm.expect(j.data).to.be.null;pm.expect(j.meta).to.be.an('object')});}",
+          "if(expected===422){const fields={'TC_003':'page','TC_006':'name','TC_007':'staff_limit','TC_008':'service_type_ids','TC_012':'name','TC_018':'child_type','TC_020':'status','TC_022':'customer_support_admin_id','TC_024':'to_customer_support_admin_id','TC_027':'email','TC_029':'password','TC_033':'lock_tenant_reason_type','TC_037':'unpaid_months','TC_038':'content','TC_041':'branch_name'};const f=fields[tc];pm.test(`ValidationException có errors.${f}`,()=>{pm.expect(j.errors).to.be.an('object');pm.expect(j.errors).to.have.property(f).that.is.an('array');pm.expect(j.data).to.be.null});}",
+          "if(['TC_001','TC_002'].includes(tc)&&pm.response.code===200)pm.test('Tenant list là array',()=>pm.expect(j.data).to.be.an('array'));",
+          "if(tc==='TC_005'&&pm.response.code===200){pm.test('Create trả đúng tenant',()=>{pm.expect(j.data.id).to.be.a('number');pm.expect(j.data.name).to.equal(pm.collectionVariables.get('tn_name'))});pm.collectionVariables.set('tenant_id',String(j.data.id));}",
+          "if(['TC_009','TC_014','TC_026'].includes(tc)&&pm.response.code===200){pm.test('Tenant detail đúng ID',()=>pm.expect(String(j.data.id)).to.equal(pm.collectionVariables.get('tenant_id')));if(tc==='TC_009')pm.test('Show đúng name create',()=>pm.expect(j.data.name).to.equal(pm.collectionVariables.get('tn_name')));if(tc==='TC_014')pm.test('Update đã persist',()=>{pm.expect(j.data.name).to.equal(pm.collectionVariables.get('tn_updated_name'));pm.expect(j.data.staff_limit).to.equal(20)});if(tc==='TC_026'){const a=(j.data.administrators||[]).find(x=>x.email===pm.collectionVariables.get('tn_second_admin_email'));pm.test('Tìm thấy admin thứ hai',()=>pm.expect(a).to.be.an('object'));if(a)pm.collectionVariables.set('tenant_admin_id',String(a.id));}}",
+          "if(tc==='TC_015'&&pm.response.code===200)pm.test('Options item đúng schema',()=>{pm.expect(j.data).to.be.an('array');j.data.forEach(x=>pm.expect(x).to.include.all.keys('id','name'))});",
+          "if(tc==='TC_016'&&pm.response.code===200)pm.test('Status summary đúng schema',()=>{pm.expect(j.data.all).to.be.a('number');pm.expect(j.data.status_counts).to.be.an('array')});",
+          "if(tc==='TC_021'&&pm.response.code===200)pm.test('Assignment count đúng schema',()=>pm.expect(j.data.tenant_count).to.be.a('number'));",
+          "if(tc==='TC_023'&&pm.response.code===200)pm.test('Handover trả count',()=>pm.expect(j.data.transferred_tenant_count).to.be.a('number'));",
+          "if(['TC_011','TC_025','TC_028','TC_030','TC_031','TC_032','TC_034','TC_036','TC_040','TC_043'].includes(tc)&&pm.response.code===200)pm.test('Mutation success có data null',()=>pm.expect(j.data).to.be.null);",
+          "if(cleanup)pm.collectionVariables.unset('tenant_id');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Setup",
+      "item": [
+        {
+          "name": "SETUP - Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{admin_email}}\",\"password\":\"{{admin_password}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SETUP - Customer Support Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/admins/customer-support-options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "admins",
+                "customer-support-options"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SETUP - Service Type Options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/service-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "service-types"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01. Tenant CRUD",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_001 - List tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_002 - List filter hợp lệ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants?status=1&page=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_003 - List page dưới minimum",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants?page=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_004 - List không token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_005 - Create tenant động",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{tn_name}}\",\n  \"type\": 1,\n  \"status\": 1,\n  \"representative_name\": \"QA Representative\",\n  \"prefecture_id\": 13,\n  \"address\": \"1-1-1 QA, Tokyo\",\n  \"staff_limit\": 10,\n  \"contract_date\": null,\n  \"parent_tenant_id\": null,\n  \"customer_support_admin_id\": {{tn_cs_id}},\n  \"service_type_ids\": [{{tn_service_type_id}}],\n  \"option_ids\": [],\n  \"feature_ids\": [],\n  \"tenant_administrator\": {\n    \"name\": \"QA Tenant Admin\",\n    \"email\": \"{{tn_initial_admin_email}}\",\n    \"password\": \"Tenant123!\",\n    \"password_confirmation\": \"Tenant123!\"\n  },\n  \"branches\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_006 - Create thiếu name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"type\": 1, \"status\": 1, \"representative_name\": \"QA Representative\", \"prefecture_id\": 13, \"address\": \"1-1-1 QA, Tokyo\", \"staff_limit\": 10, \"contract_date\": null, \"parent_tenant_id\": null, \"customer_support_admin_id\": {{tn_cs_id}}, \"service_type_ids\": [{{tn_service_type_id}}], \"option_ids\": [], \"feature_ids\": [], \"tenant_administrator\": {\"name\": \"QA Tenant Admin\", \"email\": \"{{tn_initial_admin_email}}\", \"password\": \"Tenant123!\", \"password_confirmation\": \"Tenant123!\"}, \"branches\": []}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_007 - Create staff_limit bằng 0",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"{{tn_name}}\", \"type\": 1, \"status\": 1, \"representative_name\": \"QA Representative\", \"prefecture_id\": 13, \"address\": \"1-1-1 QA, Tokyo\", \"staff_limit\": 0, \"contract_date\": null, \"parent_tenant_id\": null, \"customer_support_admin_id\": {{tn_cs_id}}, \"service_type_ids\": [{{tn_service_type_id}}], \"option_ids\": [], \"feature_ids\": [], \"tenant_administrator\": {\"name\": \"QA Tenant Admin\", \"email\": \"{{tn_initial_admin_email}}\", \"password\": \"Tenant123!\", \"password_confirmation\": \"Tenant123!\"}, \"branches\": []}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_008 - Create service_type_ids rỗng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"{{tn_name}}\", \"type\": 1, \"status\": 1, \"representative_name\": \"QA Representative\", \"prefecture_id\": 13, \"address\": \"1-1-1 QA, Tokyo\", \"staff_limit\": 10, \"contract_date\": null, \"parent_tenant_id\": null, \"customer_support_admin_id\": {{tn_cs_id}}, \"service_type_ids\": [], \"option_ids\": [], \"feature_ids\": [], \"tenant_administrator\": {\"name\": \"QA Tenant Admin\", \"email\": \"{{tn_initial_admin_email}}\", \"password\": \"Tenant123!\", \"password_confirmation\": \"Tenant123!\"}, \"branches\": []}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_009 - Show tenant vừa tạo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_010 - Show tenant không tồn tại",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/2147483647",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "2147483647"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_011 - Update tenant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{tn_updated_name}}\",\n  \"type\": 1,\n  \"parent_tenant_id\": null,\n  \"representative_name\": \"QA Representative Updated\",\n  \"status\": 1,\n  \"staff_limit\": 20,\n  \"contract_date\": null,\n  \"customer_support_admin_id\": {{tn_cs_id}},\n  \"cancel_reason_type\": 1,\n  \"cancel_description\": null,\n  \"option_ids\": [],\n  \"feature_ids\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_012 - Update name 256 ký tự",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{name_256}}\",\n  \"type\": 1,\n  \"parent_tenant_id\": null,\n  \"representative_name\": \"QA Representative Updated\",\n  \"status\": 1,\n  \"staff_limit\": 20,\n  \"contract_date\": null,\n  \"customer_support_admin_id\": {{tn_cs_id}},\n  \"cancel_reason_type\": 1,\n  \"cancel_description\": null,\n  \"option_ids\": [],\n  \"feature_ids\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_013 - Update tenant không tồn tại",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/2147483647",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "2147483647"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{tn_updated_name}}\",\n  \"type\": 1,\n  \"parent_tenant_id\": null,\n  \"representative_name\": \"QA Representative Updated\",\n  \"status\": 1,\n  \"staff_limit\": 20,\n  \"contract_date\": null,\n  \"customer_support_admin_id\": {{tn_cs_id}},\n  \"cancel_reason_type\": 1,\n  \"cancel_description\": null,\n  \"option_ids\": [],\n  \"feature_ids\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_014 - GET xác nhận update",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02. Options, Summary & Export",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_015 - Tenant options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "options"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_016 - Status summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/status-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "status-summary"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_017 - Parent options hợp lệ",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/parent-options?child_type=3",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "parent-options"
+              ],
+              "query": [
+                {
+                  "key": "child_type",
+                  "value": "3"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_018 - Parent options enum sai",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/parent-options?child_type=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "parent-options"
+              ],
+              "query": [
+                {
+                  "key": "child_type",
+                  "value": "1"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_019 - Export CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/csv"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/export?status=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_020 - Export status sai",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/export?status=99",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "99"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Customer Support",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_021 - Count CS assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/customer-support-assignments/count?customer_support_admin_id={{tn_cs_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "customer-support-assignments",
+                "count"
+              ],
+              "query": [
+                {
+                  "key": "customer_support_admin_id",
+                  "value": "{{tn_cs_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_022 - Count thiếu CS ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/customer-support-assignments/count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "customer-support-assignments",
+                "count"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_023 - Handover CS opt-in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/customer-support-handover",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "customer-support-handover"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"from_customer_support_admin_id\":{{handover_from_cs_id}},\"to_customer_support_admin_id\":{{handover_to_cs_id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Chỉ chạy khi chủ động điền hai biến environment; thao tác chuyển toàn bộ tenant giữa hai CS."
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_024 - Handover thiếu to ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/customer-support-handover",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "customer-support-handover"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"from_customer_support_admin_id\":{{tn_cs_id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Tenant Administrators",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_025 - Create admin thứ hai",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"QA Tenant Admin 2\",\"email\":\"{{tn_second_admin_email}}\",\"password\":\"Tenant123!\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_026 - GET capture admin thứ hai",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_027 - Create admin email sai",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Invalid Email Admin\",\"email\":\"invalid-email\",\"password\":\"Tenant123!\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_028 - Update admin thứ hai",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators/{{tenant_admin_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators",
+                "{{tenant_admin_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"QA Tenant Admin 2 Updated\",\"email\":\"{{tn_second_admin_email}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_029 - Change password 7 ký tự",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators/{{tenant_admin_id}}/password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators",
+                "{{tenant_admin_id}}",
+                "password"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"1234567\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_030 - Change password hợp lệ",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators/{{tenant_admin_id}}/password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators",
+                "{{tenant_admin_id}}",
+                "password"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"Tenant456!\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_031 - Delete admin thứ hai",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/administrators/{{tenant_admin_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "administrators",
+                "{{tenant_admin_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Lock & Unlock",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_032 - Lock tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/lock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "lock"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"lock_tenant_reason_type\":1,\"description\":\"Automated API lock test\",\"is_send_tenant_admin\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_033 - Lock thiếu reason",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/lock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "lock"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_034 - Unlock tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "unlock"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_send_tenant_admin\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_035 - Unlock tenant không tồn tại",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/2147483647/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "2147483647",
+                "unlock"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_send_tenant_admin\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06. Billing Notice",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_036 - Send billing notice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/send-billing-notice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "send-billing-notice"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unpaid_reason_type\":1,\"content\":\"Automated billing notice API test\",\"unpaid_months\":[\"2026-10\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_037 - Billing unpaid_months rỗng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/send-billing-notice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "send-billing-notice"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unpaid_reason_type\":1,\"content\":\"Automated billing notice API test\",\"unpaid_months\":[]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_038 - Billing content 1001 ký tự",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/send-billing-notice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "send-billing-notice"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unpaid_reason_type\":1,\"content\":\"{{content_1001}}\",\"unpaid_months\":[\"2026-10\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_039 - Billing tenant không tồn tại",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/2147483647/send-billing-notice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "2147483647",
+                "send-billing-notice"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unpaid_reason_type\":1,\"content\":\"Not found tenant billing test\",\"unpaid_months\":[\"2026-10\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07. Tenant Service Types",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_040 - Add service type branch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/service-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "service-types"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"branch_name\":\"{{tn_branch_name}}\",\"service_type_id\":{{tn_service_type_id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_041 - Add service type thiếu branch_name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}/service-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}",
+                "service-types"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"service_type_id\":{{tn_service_type_id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_042 - Add service type tenant không tồn tại",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/2147483647/service-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "2147483647",
+                "service-types"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"branch_name\":\"Not Found Tenant Branch\",\"service_type_id\":{{tn_service_type_id}}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08. Delete & Verify",
+      "item": [
+        {
+          "name": "WELVIE_TENANTS_TC_043 - Delete tenant test",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "WELVIE_TENANTS_TC_044 - Show tenant sau delete",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "99. Fallback Cleanup",
+      "item": [
+        {
+          "name": "CLEANUP - Delete tenant nếu còn tồn tại",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tn_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('tenant_id')) pm.execution.skipRequest();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "tn_access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_cs_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_service_type_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenant_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenant_admin_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_updated_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_initial_admin_email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_second_admin_email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tn_branch_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "name_256",
+      "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "type": "string"
+    },
+    {
+      "key": "content_1001",
+      "value": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "type": "string"
+    }
+  ]
+}
